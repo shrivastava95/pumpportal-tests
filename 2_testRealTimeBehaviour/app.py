@@ -412,7 +412,7 @@ def index():
                             <p><span class="label">Market Cap (USD):</span> <span class="value">${mcUsd}</span></p>
                             <p><span class="label">Price / Token (USD):</span> <span class="value">${usdPrice}</span></p>
                             <!-- Add class and data-timestamp to the time value span -->
-                            <p><span class="label">Last Update:</span> <span class="value time-ago-value" data-timestamp="${lastUpdateTimestamp}">${timeAgo}</span></p> 
+                            <p><span class="label">Last Trade:</span> <span class="value time-ago-value" data-timestamp="${lastUpdateTimestamp}">${timeAgo}</span></p> 
                         </div>
                     `;
                 }
