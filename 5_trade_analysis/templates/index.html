@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Trade Analysis</title>
+    <!-- Remove Chart.js -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script> -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script> -->
+    <!-- Add Plotly.js -->
+    <script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
+        h1, h2 { color: #007bff; }
+        button, .nav-link { 
+            padding: 8px 15px; 
+            background-color: #007bff; 
+            color: white !important;
+            border: none; 
+            border-radius: 3px; 
+            cursor: pointer; 
+            text-decoration: none;
+            display: inline-block;
+            margin: 5px;
+        }
+        button:hover, .nav-link:hover { background-color: #0056b3; }
+        .nav-link.disabled { background-color: #ccc; cursor: not-allowed; pointer-events: none; }
+        .navigation { margin-bottom: 20px; padding: 10px 0; border-bottom: 1px solid #eee; text-align: center; }
+        .nav-info { display: inline-block; margin: 0 20px; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; word-wrap: break-word; }
+        th { background-color: #e9ecef; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        .error { color: red; font-weight: bold; }
+        .summary { margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 5px; }
+        .summary p { margin: 5px 0; }
+        .chart-container { 
+            margin-top: 30px; 
+            padding: 20px; 
+            background-color: #fff; 
+            border-radius: 5px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>Token Trade Analysis</h1>
+    
+    <div class="navigation">
+        <a href="{{ url_for('show_token', token_index=prev_index) if prev_index is not none else '#' }}" 
+           class="nav-link {{ 'disabled' if prev_index is none else '' }}">Previous</a>
+        
+        <span class="nav-info">
+            {% if total_tokens > 0 %}
+                Token {{ token_index + 1 }} of {{ total_tokens }}
+            {% else %}
+                No Tokens Found
+            {% endif %}
+        </span>
+        
+        <a href="{{ url_for('show_token', token_index=next_index) if next_index is not none else '#' }}" 
+           class="nav-link {{ 'disabled' if next_index is none else '' }}">Next</a>
+    </div>
+
+    {% if error %}
+        <p class="error">Error: {{ error }}</p>
+    {% endif %}
+
+    {% if current_mint and not error %}
+        <h2>Analysis for: {{ current_mint }}</h2>
+        
+        {% if summary %}
+            <div class="summary">
+                <h3>Summary Statistics</h3>
+                <p><strong>Total Trades:</strong> {{ summary.total_trades }}</p>
+                <p><strong>Buy Trades:</strong> {{ summary.buy_trades }}</p>
+                <p><strong>Sell Trades:</strong> {{ summary.sell_trades }}</p>
+                <p><strong>First Trade Logged:</strong> {{ summary.first_trade }}</p>
+                <p><strong>Last Trade Logged:</strong> {{ summary.last_trade }}</p>
+                <p><strong>Average SOL Amount:</strong> {{ "%.6f" | format(summary.avg_sol_amount) }}</p>
+                <p><strong>Total SOL Volume (Buy):</strong> {{ "%.6f" | format(summary.total_sol_buy) }}</p>
+                <p><strong>Total SOL Volume (Sell):</strong> {{ "%.6f" | format(summary.total_sol_sell) }}</p>
+            </div>
+        {% endif %}
+
+        {% if chart_json %}
+            <div class="chart-container">
+                <!-- Use a div for Plotly, remove canvas title -->
+                <!-- <h3>Market Cap (SOL) Over Time</h3> --> 
+                <div id="marketCapChart"></div> 
+            </div>
+        {% endif %}
+
+        {% if trades_html %}
+            <h3>Trade Details</h3>
+            {{ trades_html | safe }}
+        {% else %}
+            <p>No trade data found for this token.</p>
+        {% endif %}
+    {% else %}
+        {% if not error %}
+        <p>Loading data or no token selected...</p> 
+        {% endif %}
+    {% endif %}
+
+    <!-- Add Trader Activity Section -->
+    {% if trader_activity is not none %}
+        <h3>Trader Activity Summary</h3>
+        {% if trader_activity %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Trader Public Key (Truncated)</th>
+                        <th>First Buy (Logged)</th>
+                        <th>Apparent Exit (Logged)</th>
+                        <th>Final Balance (Logged)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for activity in trader_activity %}
+                        <tr>
+                            <td>{{ activity.trader[:10] }}...{{ activity.trader[-10:] }}</td>
+                            <td>{{ activity.first_buy }}</td>
+                            <td>{{ activity.apparent_exit }}</td>
+                            <td style="text-align: right;">{{ activity.final_balance }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No traders with buy activity found for this token in the selected period.</p>
+        {% endif %}
+    {% endif %}
+
+    <!-- Plotly Initialization Script -->
+    <script>
+        // Get the JSON string passed from Flask (or the string 'null')
+        const chartJsonString = {{ chart_json | tojson | safe }};
+        
+        if (chartJsonString) { // Check if it's not null from Flask
+             let figure;
+             try {
+                 // Parse the JSON string
+                 figure = JSON.parse(chartJsonString); 
+                 
+                 // Check if figure or figure data is valid after parsing
+                 if (!figure || !figure.data) {
+                      throw new Error("Parsed figure data is invalid.");
+                 }
+                 
+                 const chartDiv = document.getElementById('marketCapChart');
+                 // Ensure the div exists before trying to plot
+                 if (chartDiv) {
+                    Plotly.newPlot(chartDiv, figure.data, figure.layout, {responsive: true});
+                 } else {
+                    console.error("Chart container div not found.");
+                 }
+             } catch (e) {
+                 console.error("Error parsing chart JSON or rendering Plotly chart:", e);
+                 console.error("Received JSON string:", chartJsonString); // Log the problematic string
+                 // Display error to user within the chart container if possible
+                 const chartContainer = document.querySelector('.chart-container');
+                 if (chartContainer) {
+                     chartContainer.innerHTML += '<p style="color:red;">Error rendering chart. Check console for details.</p>';
+                 }
+             }
+        } else {
+            // Handle case where chart_json was None from backend
+            const chartContainer = document.querySelector('.chart-container');
+            if (chartContainer) { 
+                // Ensure the container exists before adding message
+                chartContainer.innerHTML += '<p>Chart data is unavailable for this period.</p>';
+            }
+        }
+    </script>
+
+</body>
+</html> 

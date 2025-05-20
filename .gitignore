@@ -1,2 +1,15 @@
+# secrets
 **/.venv/
 **/.env
+
+# database files
+**/trades*.db*
+
+# archives
+**/*.tar
+**/*.7z
+**/*.zip
+**/*.tar.gz
+
+# repodump
+**/repodump.txt
